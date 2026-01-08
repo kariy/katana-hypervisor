@@ -1,8 +1,0 @@
-# Ignore actual boot component binaries (they're large ~40MB total)
-vmlinuz
-initrd.img
-ovmf.fd
-
-# Keep README and this gitignore
-!README.md
-!.gitignore

@@ -105,20 +105,7 @@ cd katana-hypervisor
 cargo build --release
 ```
 
-### Build Boot Components
-
-**Required before first use**: Build the shared VM boot components from the Katana repository.
-
-```bash
-# Build boot components (kernel + initrd + OVMF)
-cd /path/to/katana
-make build-tee
-
-# Copy to hypervisor
-cp output/{vmlinuz,initrd.img,ovmf.fd} /path/to/katana-hypervisor/boot-components/
-```
-
-See `boot-components/README.md` for details.
+**✅ Boot components included**: VM boot components (kernel, initrd, OVMF) are included in the repository. No separate build step needed!
 
 ## Quick Start
 
@@ -252,14 +239,6 @@ katana-hypervisor/
 # Add user to kvm group
 sudo usermod -aG kvm $USER
 # Log out and back in
-```
-
-### Boot Components Missing
-
-```bash
-# Build boot components from katana repo
-cd /path/to/katana && make build-tee
-cp output/{vmlinuz,initrd.img,ovmf.fd} boot-components/
 ```
 
 ### Port Already in Use
