@@ -12,8 +12,8 @@ pub fn execute(db: &StateDatabase, vm_manager: &VmManager) -> Result<()> {
     }
 
     // Print header
-    println!("{:<20} {:<12} {:<8} {:<10} {:<10} {:<8}", "NAME", "STATUS", "VCPUS", "MEMORY", "PORT", "PID");
-    println!("{}", "-".repeat(80));
+    println!("{:<20} {:<12} {:<8} {:<6} {:<10} {:<10} {:<8}", "NAME", "STATUS", "VCPUS", "TEE", "MEMORY", "PORT", "PID");
+    println!("{}", "-".repeat(86));
 
     // Print instances
     for state in instances {
@@ -34,12 +34,14 @@ pub fn execute(db: &StateDatabase, vm_manager: &VmManager) -> Result<()> {
         };
 
         let pid_str = state.vm_pid.map(|p| p.to_string()).unwrap_or("-".to_string());
+        let tee_str = if state.config.tee_mode { "yes" } else { "no" };
 
         println!(
-            "{:<20} {:<12} {:<8} {:<10} {:<10} {:<8}",
+            "{:<20} {:<12} {:<8} {:<6} {:<10} {:<10} {:<8}",
             state.name,
             status_str,
             state.config.vcpus,
+            tee_str,
             format!("{}M", state.config.memory_mb),
             state.config.rpc_port,
             pid_str

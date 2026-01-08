@@ -42,6 +42,17 @@ pub fn execute(name: &str, db: &StateDatabase, vm_manager: &VmManager) -> Result
     let katana_args = state.config.build_katana_args();
     let kernel_cmdline = QemuConfig::build_kernel_cmdline(&katana_args);
 
+    // Build SEV-SNP config if TEE mode is enabled
+    let sev_snp_config = if state.config.tee_mode {
+        Some(crate::qemu::config::SevSnpConfig {
+            cbitpos: 51,           // C-bit position for AMD EPYC
+            reduced_phys_bits: 1,  // Reserved physical address bits
+            vcpu_type: state.config.vcpu_type.clone(),
+        })
+    } else {
+        None
+    };
+
     // Build QEMU configuration
     let qemu_config = QemuConfig {
         memory_mb: state.config.memory_mb,
@@ -58,7 +69,7 @@ pub fn execute(name: &str, db: &StateDatabase, vm_manager: &VmManager) -> Result
             "/tmp/katana-hypervisor-{}.pid",
             state.id
         )),
-        sev_snp: None, // Non-TEE mode for MVP
+        sev_snp: sev_snp_config,
         enable_kvm: true,
     };
 
@@ -68,6 +79,9 @@ pub fn execute(name: &str, db: &StateDatabase, vm_manager: &VmManager) -> Result
     println!("  vCPUs: {}", qemu_config.vcpus);
     println!("  Memory: {} MB", qemu_config.memory_mb);
     println!("  RPC Port: {}", qemu_config.rpc_port);
+    if state.config.tee_mode {
+        println!("  TEE Mode: AMD SEV-SNP ({})", state.config.vcpu_type);
+    }
 
     // Launch VM
     let pid = vm_manager.launch_vm(&qemu_config)?;

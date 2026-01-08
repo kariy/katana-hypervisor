@@ -14,6 +14,8 @@ pub fn execute(
     storage: &str,
     port: Option<u16>,
     dev: bool,
+    tee: bool,
+    vcpu_type: &str,
     auto_start: bool,
     db: &StateDatabase,
     storage_manager: &StorageManager,
@@ -62,6 +64,13 @@ pub fn execute(
     // Get paths for instance files
     let paths = storage_manager.get_paths(&instance_id);
 
+    // Build extra args for katana
+    let mut extra_args = vec![];
+    if tee {
+        extra_args.push("--tee.provider".to_string());
+        extra_args.push("sev-snp".to_string());
+    }
+
     // Create instance configuration using validated boot components
     let config = InstanceConfig {
         vcpus,
@@ -69,8 +78,12 @@ pub fn execute(
         storage_bytes,
         rpc_port,
         metrics_port: None,
-        tee_mode: false,
-        vcpu_type: "host".to_string(),
+        tee_mode: tee,
+        vcpu_type: if tee {
+            vcpu_type.to_string()
+        } else {
+            "host".to_string()
+        },
         expected_measurement: None,
         kernel_path: boot_components.kernel_path.clone(),
         initrd_path: boot_components.initrd_path.clone(),
@@ -81,7 +94,7 @@ pub fn execute(
         block_time: None,
         accounts: Some(10),
         disable_fee: dev,
-        extra_args: vec![],
+        extra_args,
     };
 
     // Create instance state
@@ -101,6 +114,9 @@ pub fn execute(
     println!("  Memory: {} MB", memory_mb);
     println!("  Storage: {} GB", storage_bytes / 1024 / 1024 / 1024);
     println!("  RPC Port: {}", rpc_port);
+    if tee {
+        println!("  TEE Mode: AMD SEV-SNP ({})", vcpu_type);
+    }
     println!("  Data Directory: {}", instance_dir.display());
 
     // Auto-start if requested

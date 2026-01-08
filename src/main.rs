@@ -53,6 +53,14 @@ enum Commands {
         #[arg(long)]
         dev: bool,
 
+        /// Enable TEE mode (AMD SEV-SNP)
+        #[arg(long)]
+        tee: bool,
+
+        /// CPU type for TEE mode (default: EPYC-v4)
+        #[arg(long, default_value = "EPYC-v4")]
+        vcpu_type: String,
+
         /// Start immediately after creation
         #[arg(long)]
         auto_start: bool,
@@ -184,6 +192,8 @@ fn main() -> Result<()> {
             storage: storage_str,
             port,
             dev,
+            tee,
+            vcpu_type,
             auto_start,
         } => {
             katana_hypervisor::cli::create::execute(
@@ -193,6 +203,8 @@ fn main() -> Result<()> {
                 &storage_str,
                 port,
                 dev,
+                tee,
+                &vcpu_type,
                 auto_start,
                 &db,
                 &storage,

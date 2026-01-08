@@ -72,7 +72,8 @@ mod tests {
         assert!(args.contains(&"file:/tmp/serial.log".to_string()));
         assert!(args.contains(&"-qmp".to_string()));
         assert!(args.contains(&"unix:/tmp/qmp.sock,server,nowait".to_string()));
-        assert!(args.contains(&"-nographic".to_string()));
+        assert!(args.contains(&"-display".to_string()));
+        assert!(args.contains(&"none".to_string()));
     }
 
     #[test]
@@ -170,5 +171,25 @@ mod tests {
 
         let args = config.to_qemu_args();
         assert!(!args.contains(&"-enable-kvm".to_string()));
+    }
+
+    #[test]
+    fn test_tee_mode_kernel_cmdline() {
+        let katana_args = vec![
+            "--http.addr=0.0.0.0".to_string(),
+            "--http.port=5050".to_string(),
+            "--tee.provider".to_string(),
+            "sev-snp".to_string(),
+        ];
+
+        let cmdline = QemuConfig::build_kernel_cmdline(&katana_args);
+
+        assert!(cmdline.contains("console=ttyS0"));
+        assert!(cmdline.contains("loglevel=4"));
+        assert!(cmdline.contains("katana.args="));
+        assert!(cmdline.contains("--http.addr=0.0.0.0"));
+        assert!(cmdline.contains("--http.port=5050"));
+        assert!(cmdline.contains("--tee.provider"));
+        assert!(cmdline.contains("sev-snp"));
     }
 }
