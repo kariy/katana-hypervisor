@@ -60,10 +60,6 @@ enum Commands {
         /// CPU type for TEE mode (default: EPYC-v4)
         #[arg(long, default_value = "EPYC-v4")]
         vcpu_type: String,
-
-        /// Start immediately after creation
-        #[arg(long)]
-        auto_start: bool,
     },
 
     /// Start an instance
@@ -163,7 +159,6 @@ fn main() -> Result<()> {
             dev,
             tee,
             vcpu_type,
-            auto_start,
         } => {
             katana_hypervisor::cli::create::execute(
                 &name,
@@ -174,7 +169,6 @@ fn main() -> Result<()> {
                 dev,
                 tee,
                 &vcpu_type,
-                auto_start,
                 &db,
                 &storage,
                 &port_allocator,

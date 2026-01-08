@@ -16,7 +16,6 @@ pub fn execute(
     dev: bool,
     tee: bool,
     vcpu_type: &str,
-    auto_start: bool,
     db: &StateDatabase,
     storage_manager: &StorageManager,
     port_allocator: &PortAllocator,
@@ -119,13 +118,9 @@ pub fn execute(
     }
     println!("  Data Directory: {}", instance_dir.display());
 
-    // Auto-start if requested
-    if auto_start {
-        println!("\nStarting instance...");
-        crate::cli::start::execute(name, db, vm_manager)?;
-    } else {
-        println!("\nRun 'katana-hypervisor start {}' to start the instance", name);
-    }
+    // Automatically start the instance
+    println!("\nStarting instance...");
+    crate::cli::start::execute(name, db, vm_manager)?;
 
     Ok(())
 }
