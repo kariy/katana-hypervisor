@@ -67,7 +67,7 @@ pub async fn get_stats(
     }
 
     // Verify VM process is actually running using ManagedVm
-    let managed_vm = ManagedVm::from_instance(&instance_state.id, &state.db)
+    let managed_vm = ManagedVm::from_instance(&instance_state.id, &state.db).await
         .map_err(|e| ApiError::Internal(format!("Failed to load VM instance: {}", e)))?;
 
     if !managed_vm.is_running() {
@@ -83,31 +83,23 @@ pub async fn get_stats(
         ApiError::NotFound("Instance has no QMP socket".to_string())
     })?;
 
-    // Connect to QMP socket and query stats in a blocking thread pool
-    // (QMP client uses its own runtime and can't be called from within async context)
-    let qmp_socket_clone = qmp_socket.clone();
-    let (vm_status, cpus, memory) = tokio::task::spawn_blocking(move || {
-        let mut qmp_client = QmpClient::new();
-        qmp_client.connect(&qmp_socket_clone).map_err(|e| {
-            ApiError::Internal(format!("Failed to connect to QMP socket: {}", e))
-        })?;
+    // Connect to QMP socket and query stats
+    let mut qmp_client = QmpClient::new();
+    qmp_client.connect(&qmp_socket).await.map_err(|e| {
+        ApiError::Internal(format!("Failed to connect to QMP socket: {}", e))
+    })?;
 
-        let vm_status = qmp_client.query_status().map_err(|e| {
-            ApiError::Internal(format!("Failed to query VM status: {}", e))
-        })?;
+    let vm_status = qmp_client.query_status().await.map_err(|e| {
+        ApiError::Internal(format!("Failed to query VM status: {}", e))
+    })?;
 
-        let cpus = qmp_client.query_cpus().map_err(|e| {
-            ApiError::Internal(format!("Failed to query CPUs: {}", e))
-        })?;
+    let cpus = qmp_client.query_cpus().await.map_err(|e| {
+        ApiError::Internal(format!("Failed to query CPUs: {}", e))
+    })?;
 
-        let memory = qmp_client.query_memory().map_err(|e| {
-            ApiError::Internal(format!("Failed to query memory: {}", e))
-        })?;
-
-        Ok::<_, ApiError>((vm_status, cpus, memory))
-    })
-    .await
-    .map_err(|e| ApiError::Internal(format!("Failed to spawn blocking task: {}", e)))??;
+    let memory = qmp_client.query_memory().await.map_err(|e| {
+        ApiError::Internal(format!("Failed to query memory: {}", e))
+    })?;
 
     // Get process uptime
     let uptime = if let Some(pid) = pid {

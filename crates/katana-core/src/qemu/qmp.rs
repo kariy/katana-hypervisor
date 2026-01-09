@@ -2,51 +2,42 @@ use crate::{HypervisorError, Result};
 use qmp::{Client, Endpoint};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use tokio::runtime::Runtime;
 
+#[derive(Debug)]
 pub struct QmpClient {
-    runtime: Runtime,
     client: Option<Client>,
 }
 
 impl QmpClient {
     pub fn new() -> Self {
-        let runtime = Runtime::new().expect("Failed to create tokio runtime");
-        Self {
-            runtime,
-            client: None,
-        }
+        Self { client: None }
     }
 
     /// Connect to QMP socket
-    pub fn connect(&mut self, socket_path: &Path) -> Result<()> {
+    pub async fn connect(&mut self, socket_path: &Path) -> Result<()> {
         let socket_path = socket_path.to_path_buf();
 
-        let client = self.runtime.block_on(async {
-            Client::connect(Endpoint::unix(socket_path))
-                .await
-                .map_err(|e| {
-                    HypervisorError::QemuFailed(format!("Failed to connect to QMP socket: {}", e))
-                })
-        })?;
+        let client = Client::connect(Endpoint::unix(socket_path))
+            .await
+            .map_err(|e| {
+                HypervisorError::QemuFailed(format!("Failed to connect to QMP socket: {}", e))
+            })?;
 
         self.client = Some(client);
         Ok(())
     }
 
     /// Query VM status
-    pub fn query_status(&mut self) -> Result<VmStatus> {
+    pub async fn query_status(&mut self) -> Result<VmStatus> {
         let client = self
             .client
             .as_ref()
             .ok_or_else(|| HypervisorError::QemuFailed("Not connected to QMP".to_string()))?;
 
-        let response: serde_json::Value = self.runtime.block_on(async {
-            client
-                .execute("query-status", Option::<()>::None)
-                .await
-                .map_err(|e| HypervisorError::QemuFailed(format!("QMP query-status failed: {}", e)))
-        })?;
+        let response: serde_json::Value = client
+            .execute("query-status", Option::<()>::None)
+            .await
+            .map_err(|e| HypervisorError::QemuFailed(format!("QMP query-status failed: {}", e)))?;
 
         let status: VmStatus = serde_json::from_value(response).map_err(|e| {
             HypervisorError::QemuFailed(format!("Failed to parse VM status: {}", e))
@@ -56,41 +47,38 @@ impl QmpClient {
     }
 
     /// Query CPU information
-    pub fn query_cpus(&mut self) -> Result<Vec<CpuInfo>> {
+    pub async fn query_cpus(&mut self) -> Result<Vec<CpuInfo>> {
         let client = self
             .client
             .as_ref()
             .ok_or_else(|| HypervisorError::QemuFailed("Not connected to QMP".to_string()))?;
 
-        let response: serde_json::Value = self.runtime.block_on(async {
-            client
-                .execute("query-cpus-fast", Option::<()>::None)
-                .await
-                .map_err(|e| HypervisorError::QemuFailed(format!("QMP query-cpus-fast failed: {}", e)))
-        })?;
+        let response: serde_json::Value = client
+            .execute("query-cpus-fast", Option::<()>::None)
+            .await
+            .map_err(|e| {
+                HypervisorError::QemuFailed(format!("QMP query-cpus-fast failed: {}", e))
+            })?;
 
-        let cpus: Vec<CpuInfo> = serde_json::from_value(response).map_err(|e| {
-            HypervisorError::QemuFailed(format!("Failed to parse CPU info: {}", e))
-        })?;
+        let cpus: Vec<CpuInfo> = serde_json::from_value(response)
+            .map_err(|e| HypervisorError::QemuFailed(format!("Failed to parse CPU info: {}", e)))?;
 
         Ok(cpus)
     }
 
     /// Query memory information
-    pub fn query_memory(&mut self) -> Result<MemoryInfo> {
+    pub async fn query_memory(&mut self) -> Result<MemoryInfo> {
         let client = self
             .client
             .as_ref()
             .ok_or_else(|| HypervisorError::QemuFailed("Not connected to QMP".to_string()))?;
 
-        let response: serde_json::Value = self.runtime.block_on(async {
-            client
-                .execute("query-memory-size-summary", Option::<()>::None)
-                .await
-                .map_err(|e| {
-                    HypervisorError::QemuFailed(format!("QMP query-memory-size-summary failed: {}", e))
-                })
-        })?;
+        let response: serde_json::Value = client
+            .execute("query-memory-size-summary", Option::<()>::None)
+            .await
+            .map_err(|e| {
+                HypervisorError::QemuFailed(format!("QMP query-memory-size-summary failed: {}", e))
+            })?;
 
         let memory: MemoryInfo = serde_json::from_value(response).map_err(|e| {
             HypervisorError::QemuFailed(format!("Failed to parse memory info: {}", e))
@@ -122,20 +110,18 @@ impl QmpClient {
     /// - Graceful VM shutdown with proper cleanup
     /// - Scheduled maintenance with data integrity
     /// - Allowing services to terminate properly
-    pub fn system_powerdown(&mut self) -> Result<()> {
+    pub async fn system_powerdown(&mut self) -> Result<()> {
         let client = self
             .client
             .as_ref()
             .ok_or_else(|| HypervisorError::QemuFailed("Not connected to QMP".to_string()))?;
 
-        self.runtime.block_on(async {
-            client
-                .execute::<(), ()>("system_powerdown", None)
-                .await
-                .map_err(|e| {
-                    HypervisorError::QemuFailed(format!("QMP system_powerdown failed: {}", e))
-                })
-        })?;
+        client
+            .execute::<(), ()>("system_powerdown", None)
+            .await
+            .map_err(|e| {
+                HypervisorError::QemuFailed(format!("QMP system_powerdown failed: {}", e))
+            })?;
 
         Ok(())
     }
@@ -166,20 +152,16 @@ impl QmpClient {
     ///
     /// # Warning
     /// Use with caution - may cause data loss or corruption
-    pub fn quit(&mut self) -> Result<()> {
+    pub async fn quit(&mut self) -> Result<()> {
         let client = self
             .client
             .as_ref()
             .ok_or_else(|| HypervisorError::QemuFailed("Not connected to QMP".to_string()))?;
 
-        self.runtime.block_on(async {
-            client
-                .execute::<(), ()>("quit", None)
-                .await
-                .map_err(|e| {
-                    HypervisorError::QemuFailed(format!("QMP quit failed: {}", e))
-                })
-        })?;
+        client
+            .execute::<(), ()>("quit", None)
+            .await
+            .map_err(|e| HypervisorError::QemuFailed(format!("QMP quit failed: {}", e)))?;
 
         Ok(())
     }
@@ -216,20 +198,16 @@ impl QmpClient {
     /// - Guest clock stops, may cause time drift when resumed
     /// - External services may timeout during pause
     /// - Not suitable for long-term suspension (use `system_suspend` instead)
-    pub fn stop(&mut self) -> Result<()> {
+    pub async fn stop(&mut self) -> Result<()> {
         let client = self
             .client
             .as_ref()
             .ok_or_else(|| HypervisorError::QemuFailed("Not connected to QMP".to_string()))?;
 
-        self.runtime.block_on(async {
-            client
-                .execute::<(), ()>("stop", None)
-                .await
-                .map_err(|e| {
-                    HypervisorError::QemuFailed(format!("QMP stop failed: {}", e))
-                })
-        })?;
+        client
+            .execute::<(), ()>("stop", None)
+            .await
+            .map_err(|e| HypervisorError::QemuFailed(format!("QMP stop failed: {}", e)))?;
 
         Ok(())
     }
@@ -264,20 +242,16 @@ impl QmpClient {
     /// - Guest may detect time drift if using wall clock
     /// - Network connections may have been closed by peers during pause
     /// - Complements `stop()` for pause/resume cycles
-    pub fn cont(&mut self) -> Result<()> {
+    pub async fn cont(&mut self) -> Result<()> {
         let client = self
             .client
             .as_ref()
             .ok_or_else(|| HypervisorError::QemuFailed("Not connected to QMP".to_string()))?;
 
-        self.runtime.block_on(async {
-            client
-                .execute::<(), ()>("cont", None)
-                .await
-                .map_err(|e| {
-                    HypervisorError::QemuFailed(format!("QMP cont failed: {}", e))
-                })
-        })?;
+        client
+            .execute::<(), ()>("cont", None)
+            .await
+            .map_err(|e| HypervisorError::QemuFailed(format!("QMP cont failed: {}", e)))?;
 
         Ok(())
     }
@@ -320,20 +294,18 @@ impl QmpClient {
     /// - Network connections typically closed by guest before suspend
     /// - May take several seconds for guest to complete suspend sequence
     /// - Fails if guest doesn't support ACPI suspend
-    pub fn system_suspend(&mut self) -> Result<()> {
+    pub async fn system_suspend(&mut self) -> Result<()> {
         let client = self
             .client
             .as_ref()
             .ok_or_else(|| HypervisorError::QemuFailed("Not connected to QMP".to_string()))?;
 
-        self.runtime.block_on(async {
-            client
-                .execute::<(), ()>("system_suspend", None)
-                .await
-                .map_err(|e| {
-                    HypervisorError::QemuFailed(format!("QMP system_suspend failed: {}", e))
-                })
-        })?;
+        client
+            .execute::<(), ()>("system_suspend", None)
+            .await
+            .map_err(|e| {
+                HypervisorError::QemuFailed(format!("QMP system_suspend failed: {}", e))
+            })?;
 
         Ok(())
     }
@@ -376,20 +348,16 @@ impl QmpClient {
     /// - Network connections need to be reestablished
     /// - Guest clock typically synced via NTP after resume
     /// - Different from `cont()` - guest aware and participates
-    pub fn system_wakeup(&mut self) -> Result<()> {
+    pub async fn system_wakeup(&mut self) -> Result<()> {
         let client = self
             .client
             .as_ref()
             .ok_or_else(|| HypervisorError::QemuFailed("Not connected to QMP".to_string()))?;
 
-        self.runtime.block_on(async {
-            client
-                .execute::<(), ()>("system_wakeup", None)
-                .await
-                .map_err(|e| {
-                    HypervisorError::QemuFailed(format!("QMP system_wakeup failed: {}", e))
-                })
-        })?;
+        client
+            .execute::<(), ()>("system_wakeup", None)
+            .await
+            .map_err(|e| HypervisorError::QemuFailed(format!("QMP system_wakeup failed: {}", e)))?;
 
         Ok(())
     }
@@ -434,20 +402,16 @@ impl QmpClient {
     /// - Guest has no opportunity to save state or cleanup
     /// - Prefer `system_powerdown()` for graceful reboot
     /// - Useful for testing but risky for production data
-    pub fn system_reset(&mut self) -> Result<()> {
+    pub async fn system_reset(&mut self) -> Result<()> {
         let client = self
             .client
             .as_ref()
             .ok_or_else(|| HypervisorError::QemuFailed("Not connected to QMP".to_string()))?;
 
-        self.runtime.block_on(async {
-            client
-                .execute::<(), ()>("system_reset", None)
-                .await
-                .map_err(|e| {
-                    HypervisorError::QemuFailed(format!("QMP system_reset failed: {}", e))
-                })
-        })?;
+        client
+            .execute::<(), ()>("system_reset", None)
+            .await
+            .map_err(|e| HypervisorError::QemuFailed(format!("QMP system_reset failed: {}", e)))?;
 
         Ok(())
     }

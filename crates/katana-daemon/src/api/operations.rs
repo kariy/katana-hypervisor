@@ -163,7 +163,7 @@ pub async fn stop_instance(
     info!(name = %name, pid = ?pid, "Stopping VM");
 
     // Stop VM using ManagedVm (automatically handles state tracking)
-    let mut managed_vm = ManagedVm::from_instance(&instance_state.id, &state.db)
+    let mut managed_vm = ManagedVm::from_instance(&instance_state.id, &state.db).await
         .map_err(|e| ApiError::Internal(format!("Failed to load VM instance: {}", e)))?;
 
     managed_vm.stop(30).map_err(|e| {
@@ -212,10 +212,10 @@ pub async fn pause_instance(
     }
 
     // Pause VM using ManagedVm (automatically handles state tracking)
-    let managed_vm = ManagedVm::from_instance(&instance_state.id, &state.db)
+    let managed_vm = ManagedVm::from_instance(&instance_state.id, &state.db).await
         .map_err(|e| ApiError::Internal(format!("Failed to load VM instance: {}", e)))?;
 
-    managed_vm.pause().map_err(|e| {
+    managed_vm.pause().await.map_err(|e| {
         ApiError::Internal(format!("Failed to pause VM: {}", e))
     })?;
 
@@ -263,16 +263,16 @@ pub async fn resume_instance(
     let is_suspended = matches!(instance_state.status, InstanceStatus::Suspended);
 
     // Resume VM using ManagedVm (automatically handles state tracking)
-    let managed_vm = ManagedVm::from_instance(&instance_state.id, &state.db)
+    let managed_vm = ManagedVm::from_instance(&instance_state.id, &state.db).await
         .map_err(|e| ApiError::Internal(format!("Failed to load VM instance: {}", e)))?;
 
     // Resume VM (handles both pause and suspend resume)
     if is_suspended {
-        managed_vm.wake().map_err(|e| {
+        managed_vm.wake().await.map_err(|e| {
             ApiError::Internal(format!("Failed to wake VM: {}", e))
         })?;
     } else {
-        managed_vm.resume().map_err(|e| {
+        managed_vm.resume().await.map_err(|e| {
             ApiError::Internal(format!("Failed to resume VM: {}", e))
         })?;
     }
@@ -321,19 +321,19 @@ pub async fn suspend_instance(
     let is_paused = matches!(instance_state.status, InstanceStatus::Paused);
 
     // Suspend VM using ManagedVm (automatically handles state tracking)
-    let managed_vm = ManagedVm::from_instance(&instance_state.id, &state.db)
+    let managed_vm = ManagedVm::from_instance(&instance_state.id, &state.db).await
         .map_err(|e| ApiError::Internal(format!("Failed to load VM instance: {}", e)))?;
 
     // If paused, need to resume first before suspending
     if is_paused {
         info!(name = %name, "Resuming from pause before suspend");
-        managed_vm.resume().map_err(|e| {
+        managed_vm.resume().await.map_err(|e| {
             ApiError::Internal(format!("Failed to resume before suspend: {}", e))
         })?;
     }
 
     // Suspend VM
-    managed_vm.suspend().map_err(|e| {
+    managed_vm.suspend().await.map_err(|e| {
         ApiError::Internal(format!("Failed to suspend VM (guest may not support ACPI): {}", e))
     })?;
 
@@ -367,19 +367,19 @@ pub async fn reset_instance(
     let is_paused = matches!(instance_state.status, InstanceStatus::Paused);
 
     // Reset VM using ManagedVm (automatically handles state tracking)
-    let managed_vm = ManagedVm::from_instance(&instance_state.id, &state.db)
+    let managed_vm = ManagedVm::from_instance(&instance_state.id, &state.db).await
         .map_err(|e| ApiError::Internal(format!("Failed to load VM instance: {}", e)))?;
 
     // If paused, resume first
     if is_paused {
         info!(name = %name, "Resuming from pause before reset");
-        managed_vm.resume().map_err(|e| {
+        managed_vm.resume().await.map_err(|e| {
             ApiError::Internal(format!("Failed to resume before reset: {}", e))
         })?;
     }
 
     // Reset VM
-    managed_vm.reset().map_err(|e| {
+    managed_vm.reset().await.map_err(|e| {
         ApiError::Internal(format!("Failed to reset VM: {}", e))
     })?;
 

@@ -53,13 +53,13 @@ impl Vm {
     ///
     /// ```no_run
     /// # use katana_core::qemu::{QemuConfig, Vm};
-    /// # fn example(config: QemuConfig) -> katana_core::Result<()> {
+    /// # async fn example(config: QemuConfig) -> katana_core::Result<()> {
     /// let pid_str = std::fs::read_to_string("/tmp/qemu.pid")?;
     /// let pid: i32 = pid_str.trim().parse()
     ///     .map_err(|e| katana_core::HypervisorError::QemuFailed(format!("Invalid PID: {}", e)))?;
     ///
     /// let mut vm = Vm::new(config);
-    /// vm.attach(pid)?;  // Verifies it's the right QEMU instance
+    /// vm.attach(pid).await?;  // Verifies it's the right QEMU instance
     /// vm.stop(10)?;
     /// # Ok(())
     /// # }
@@ -73,7 +73,7 @@ impl Vm {
     /// - PID is not a QEMU process
     /// - QMP socket doesn't match config (wrong VM instance)
     /// - QMP socket is not responsive
-    pub fn attach(&mut self, pid: i32) -> Result<()> {
+    pub async fn attach(&mut self, pid: i32) -> Result<()> {
         if self.pid.is_some() {
             return Err(HypervisorError::QemuFailed(
                 "VM is already running or attached".to_string(),
@@ -86,7 +86,7 @@ impl Vm {
         self.verify_qemu_process(pid)?;
 
         // Verify QMP connectivity
-        self.verify_qmp_connectivity()?;
+        self.verify_qmp_connectivity().await?;
 
         self.pid = Some(pid);
 
@@ -192,56 +192,56 @@ impl Vm {
     }
 
     /// Pause VM execution (freeze vCPUs via QMP).
-    pub fn pause(&self) -> Result<()> {
+    pub async fn pause(&self) -> Result<()> {
         self.require_pid()?;
 
         tracing::info!("Pausing VM via QMP");
 
         let mut qmp_client = crate::qemu::QmpClient::new();
-        qmp_client.connect(&self.config.qmp_socket)?;
-        qmp_client.stop()?;
+        qmp_client.connect(&self.config.qmp_socket).await?;
+        qmp_client.stop().await?;
 
         tracing::info!("VM paused successfully");
         Ok(())
     }
 
     /// Resume VM execution (unfreeze vCPUs via QMP).
-    pub fn resume(&self) -> Result<()> {
+    pub async fn resume(&self) -> Result<()> {
         self.require_pid()?;
 
         tracing::info!("Resuming VM via QMP");
 
         let mut qmp_client = crate::qemu::QmpClient::new();
-        qmp_client.connect(&self.config.qmp_socket)?;
-        qmp_client.cont()?;
+        qmp_client.connect(&self.config.qmp_socket).await?;
+        qmp_client.cont().await?;
 
         tracing::info!("VM resumed successfully");
         Ok(())
     }
 
     /// Suspend VM to RAM (ACPI S3 via QMP). Requires guest OS cooperation.
-    pub fn suspend(&self) -> Result<()> {
+    pub async fn suspend(&self) -> Result<()> {
         self.require_pid()?;
 
         tracing::info!("Suspending VM via QMP");
 
         let mut qmp_client = crate::qemu::QmpClient::new();
-        qmp_client.connect(&self.config.qmp_socket)?;
-        qmp_client.system_suspend()?;
+        qmp_client.connect(&self.config.qmp_socket).await?;
+        qmp_client.system_suspend().await?;
 
         tracing::info!("VM suspend command sent");
         Ok(())
     }
 
     /// Wake VM from suspend (ACPI wakeup via QMP).
-    pub fn wake(&self) -> Result<()> {
+    pub async fn wake(&self) -> Result<()> {
         self.require_pid()?;
 
         tracing::info!("Waking VM via QMP");
 
         let mut qmp_client = crate::qemu::QmpClient::new();
-        qmp_client.connect(&self.config.qmp_socket)?;
-        qmp_client.system_wakeup()?;
+        qmp_client.connect(&self.config.qmp_socket).await?;
+        qmp_client.system_wakeup().await?;
 
         tracing::info!("VM wakeup command sent");
         Ok(())
@@ -250,14 +250,14 @@ impl Vm {
     /// Reset VM (hard reboot via QMP).
     ///
     /// **Warning**: Hard reset without graceful shutdown. May cause data loss.
-    pub fn reset(&self) -> Result<()> {
+    pub async fn reset(&self) -> Result<()> {
         self.require_pid()?;
 
         tracing::info!("Resetting VM via QMP");
 
         let mut qmp_client = crate::qemu::QmpClient::new();
-        qmp_client.connect(&self.config.qmp_socket)?;
-        qmp_client.system_reset()?;
+        qmp_client.connect(&self.config.qmp_socket).await?;
+        qmp_client.system_reset().await?;
 
         tracing::info!("VM reset command sent");
         Ok(())
@@ -366,9 +366,9 @@ impl Vm {
     }
 
     /// Verify QMP socket connectivity to the VM.
-    fn verify_qmp_connectivity(&self) -> Result<()> {
+    async fn verify_qmp_connectivity(&self) -> Result<()> {
         let mut qmp_client = crate::qemu::QmpClient::new();
-        qmp_client.connect(&self.config.qmp_socket).map_err(|e| {
+        qmp_client.connect(&self.config.qmp_socket).await.map_err(|e| {
             HypervisorError::QemuFailed(format!(
                 "Failed to connect to QMP socket {}: {}",
                 self.config.qmp_socket.display(),
@@ -433,19 +433,19 @@ mod tests {
         assert!(!vm.is_running());
     }
 
-    #[test]
-    fn test_attach_fails_without_process() {
+    #[tokio::test]
+    async fn test_attach_fails_without_process() {
         let config = create_test_config();
         let mut vm = Vm::new(config);
 
         // Attaching to a non-existent PID should fail
-        let result = vm.attach(99999);
+        let result = vm.attach(99999).await;
         assert!(result.is_err());
         assert!(vm.pid().is_none());
     }
 
-    #[test]
-    fn test_attach_fails_when_already_running() {
+    #[tokio::test]
+    async fn test_attach_fails_when_already_running() {
         let config = create_test_config();
         let mut vm = Vm::new(config);
 
@@ -453,7 +453,7 @@ mod tests {
         vm.pid = Some(12345);
 
         // Trying to attach when already running should fail
-        let result = vm.attach(67890);
+        let result = vm.attach(67890).await;
         assert!(result.is_err());
         assert_eq!(vm.pid(), Some(12345)); // PID unchanged
     }

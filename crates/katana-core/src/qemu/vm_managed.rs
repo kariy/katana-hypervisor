@@ -51,7 +51,7 @@ impl ManagedVm {
     ///
     /// - If the instance is not found in the database
     /// - If the PID in the database is invalid or not the expected QEMU instance
-    pub fn from_instance(instance_id: &str, db: &StateDatabase) -> Result<Self> {
+    pub async fn from_instance(instance_id: &str, db: &StateDatabase) -> Result<Self> {
         let state = db.get_instance_by_id(instance_id)?;
         let config = instance_state_to_qemu_config(&state)?;
 
@@ -59,7 +59,7 @@ impl ManagedVm {
 
         // If the instance has a PID, attempt to attach to the running process
         if let Some(pid) = state.vm_pid {
-            vm.attach(pid)?;
+            vm.attach(pid).await?;
         }
 
         Ok(Self {
@@ -104,12 +104,12 @@ impl ManagedVm {
     /// Pause VM execution with database state tracking.
     ///
     /// Updates state: `Running` -> `Pausing` -> `Paused`
-    pub fn pause(&self) -> Result<()> {
+    pub async fn pause(&self) -> Result<()> {
         tracing::info!("ManagedVm: Pausing instance {}", self.instance_id);
 
         self.update_status(InstanceStatus::Pausing)?;
 
-        match self.vm.pause() {
+        match self.vm.pause().await {
             Ok(()) => {
                 self.update_status(InstanceStatus::Paused)?;
                 tracing::info!(
@@ -128,12 +128,12 @@ impl ManagedVm {
     /// Resume VM execution with database state tracking.
     ///
     /// Updates state: `Paused` -> `Resuming` -> `Running`
-    pub fn resume(&self) -> Result<()> {
+    pub async fn resume(&self) -> Result<()> {
         tracing::info!("ManagedVm: Resuming instance {}", self.instance_id);
 
         self.update_status(InstanceStatus::Resuming)?;
 
-        match self.vm.resume() {
+        match self.vm.resume().await {
             Ok(()) => {
                 self.update_status(InstanceStatus::Running)?;
                 tracing::info!(
@@ -152,12 +152,12 @@ impl ManagedVm {
     /// Suspend VM to RAM with database state tracking (ACPI S3).
     ///
     /// Updates state: `Current` -> `Suspending` -> `Suspended`
-    pub fn suspend(&self) -> Result<()> {
+    pub async fn suspend(&self) -> Result<()> {
         tracing::info!("ManagedVm: Suspending instance {}", self.instance_id);
 
         self.update_status(InstanceStatus::Suspending)?;
 
-        match self.vm.suspend() {
+        match self.vm.suspend().await {
             Ok(()) => {
                 self.update_status(InstanceStatus::Suspended)?;
                 tracing::info!(
@@ -176,10 +176,10 @@ impl ManagedVm {
     /// Wake VM from suspend with database state tracking.
     ///
     /// Updates state: `Suspended` -> `Running`
-    pub fn wake(&self) -> Result<()> {
+    pub async fn wake(&self) -> Result<()> {
         tracing::info!("ManagedVm: Waking instance {}", self.instance_id);
 
-        match self.vm.wake() {
+        match self.vm.wake().await {
             Ok(()) => {
                 self.update_status(InstanceStatus::Running)?;
                 tracing::info!(
@@ -198,10 +198,10 @@ impl ManagedVm {
     /// Reset VM (hard reboot). State remains `Running`.
     ///
     /// **Warning**: Hard reset without graceful shutdown. May cause data loss.
-    pub fn reset(&self) -> Result<()> {
+    pub async fn reset(&self) -> Result<()> {
         tracing::info!("ManagedVm: Resetting instance {}", self.instance_id);
 
-        match self.vm.reset() {
+        match self.vm.reset().await {
             Ok(()) => {
                 // VM is still running after reset
                 self.update_status(InstanceStatus::Running)?;
@@ -478,23 +478,23 @@ mod tests {
         assert!(managed_vm.pid().is_none());
     }
 
-    #[test]
-    fn test_managed_vm_from_instance() {
+    #[tokio::test]
+    async fn test_managed_vm_from_instance() {
         let (db, temp_dir) = create_test_db();
         let instance = create_test_instance("test1", temp_dir.path().to_path_buf());
         db.save_instance(&instance).unwrap();
 
-        let managed_vm = ManagedVm::from_instance(&instance.id, &db).unwrap();
+        let managed_vm = ManagedVm::from_instance(&instance.id, &db).await.unwrap();
 
         assert_eq!(managed_vm.instance_id(), instance.id);
         assert!(!managed_vm.is_running());
     }
 
-    #[test]
-    fn test_managed_vm_from_instance_not_found() {
+    #[tokio::test]
+    async fn test_managed_vm_from_instance_not_found() {
         let (db, _temp_dir) = create_test_db();
 
-        let result = ManagedVm::from_instance("nonexistent", &db);
+        let result = ManagedVm::from_instance("nonexistent", &db).await;
         assert!(result.is_err());
     }
 
