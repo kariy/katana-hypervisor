@@ -1,6 +1,5 @@
 // Instance management module
 pub mod config;
-pub mod quota;
 pub mod state;
 pub mod storage;
 
