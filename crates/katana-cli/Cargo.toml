@@ -1,0 +1,24 @@
+[package]
+name = "katana-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+katana-models = { path = "../katana-models" }
+katana-client = { path = "../katana-client" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+
+# CLI framework
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# Config
+toml = "0.8"
+
+# Output formatting
+comfy-table = "7.0"
+
+# Utilities
+dirs = { workspace = true }
